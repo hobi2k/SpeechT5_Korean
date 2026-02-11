@@ -1,0 +1,21 @@
+[project]
+name = "speecht5-korean"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "datasets==4.4.1",
+  "huggingface-hub==0.36.0",
+  "librosa==0.10.2.post1",
+  "numpy==2.2.6",
+  "sentencepiece==0.2.1",
+  "soundfile==0.12.1",
+  "tokenizers==0.22.1",
+  "torch>=2.8.0.dev0",
+  "torchaudio>=2.8.0.dev0",
+  "torchvision>=0.23.0.dev0",
+  "torchcodec",
+  "tqdm==4.67.1",
+  "transformers==4.57.3",
+]
