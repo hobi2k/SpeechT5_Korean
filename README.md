@@ -1,10 +1,11 @@
 # SpeechT5_Korean
 
-로컬 JSONL 데이터셋으로 한국어 SpeechT5를 학습하고, 로컬 저장 모델로 추론하는 프로젝트입니다.
+본 프로젝트는 SpeechT5 한글화 프로젝트입니다.
+TTS 학습과 실험용으로 제작되었습니다.
 
 현재 메인 엔트리:
 - 학습: `scripts/train.py`
-- 추론: `scripts/inference_local.py`
+- 추론: `scripts/inference.py`
 - 텍스트/자모 유틸: `sp5_kor/text/`
 
 ## 프로젝트 구조
@@ -17,9 +18,10 @@
 - `sp5_kor/text/jamo_vocab_builder.py`: 자모 vocab 생성
 - `sp5_kor/text/korean_text_utils.py`: 텍스트 정규화/placeholder/자모 분해
 - `scripts/train.py`: JSONL 학습 CLI
-- `scripts/inference_local.py`: 로컬 모델 추론 CLI
+- `scripts/inference.py`: 로컬 모델 추론 CLI
+- `pretrained/`: Hugging Face 사전학습 모델 로컬 캐시 디렉터리
 
-## JSONL 포맷
+## JSONL 데이터셋 포맷
 
 각 라인은 아래 키를 포함해야 합니다.
 - `audio_path`
@@ -40,23 +42,19 @@
 
 ```bash
 cd SpeechT5_Korean
-uv sync --prerelease=allow
+uv sync
 ```
 
-RTX 50 계열이면 torch nightly/cu128 권장:
+RTX 50 계열이면 torch nightly/cu128 권장
+
 ```bash
 uv pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 ```
 
 ## 실행
 
-1) 자모 vocab 생성(필요 시):
-```bash
-cd SpeechT5_Korean
-uv run sp5_kor/text/jamo_vocab_builder.py
-```
+1. 학습 실행
 
-2) JSONL 학습:
 ```bash
 cd SpeechT5_Korean
 uv run scripts/train.py \
@@ -70,20 +68,28 @@ uv run scripts/train.py \
   --max_token_per_sec 35.0
 ```
 
-중단 후 이어서 학습:
+중단 후 이어서 학습
+
 ```bash
-uv run python -m scripts.train \
+uv run scripts/train.py \
   --jsonl_path /path/to/train.jsonl \
   --output_dir /path/to/output_model \
+  --num_epochs 80 \
   --resume
 ```
+
+주의:
+- `--num_epochs`는 \"추가 에폭\"이 아니라 \"최종 목표 epoch\"입니다.
+- 예: 이전에 50 epoch까지 끝났고 `--num_epochs 80 --resume`이면 51~80만 추가로 학습합니다.
+- 사전학습 모델(`speecht5_tts`, `speecht5_hifigan`, `wavlm-base-plus-sv`)은 첫 실행 시 프로젝트 루트 `pretrained/` 아래로 다운로드되고 이후 재사용됩니다.
 
 학습 시 필터 로그가 출력됩니다.
 - 전체/유지/제거 샘플 수
 - 제거 사유별 카운트
 - 유지 샘플 분포(`audio_sec`, `token_len`, `token_per_sec`의 min/p50/p95/max)
 
-3) 로컬 추론:
+2. 로컬 추론
+
 ```bash
 cd SpeechT5_Korean
 uv run scripts/inference.py \
@@ -92,9 +98,20 @@ uv run scripts/inference.py \
   --out out.wav
 ```
 
-추론 경로를 직접 지정할 수도 있습니다:
+10 epoch 주기 저장 모델 중 특정 epoch를 선택해 추론할 수 있습니다.
+
 ```bash
-uv run scripts/inference_local.py \
+uv run scripts/inference.py \
+  --model_dir /path/to/output_model \
+  --checkpoint_epoch 40 \
+  --text "40 epoch 체크포인트 모델로 추론합니다." \
+  --out out_epoch40.wav
+```
+
+추론 경로를 직접 지정할 수도 있습니다.
+
+```bash
+uv run scripts/inference.py \
   --model_dir /path/to/output_model \
   --text_utils_path /path/to/output_model/korean_text_utils.py \
   --vocoder_dir /path/to/output_model/vocoder \
@@ -117,9 +134,30 @@ uv run scripts/inference_local.py \
 - `korean_text_utils.py`
 - `speaker_embedding.pth`
 - `vocoder/`
-- `checkpoint_last.pt` (매 epoch 마지막 상태: model/optimizer/scaler/epoch/best)
+- `checkpoint_last.pt` (매 epoch 마지막 상태: model/optimizer/scaler/epoch)
+- `checkpoints/epoch_XXXXXX/` (10 epoch 단위 HF 모델 저장, 최대 5개 유지)
 
-## 참고
+## 주의
 
-- `datasets`에서 audio decode 시 환경에 따라 `torchcodec`가 필요할 수 있습니다.
-- `torchcodec` 사용 시 FFmpeg/torch 버전 호환성을 함께 확인하세요.
+`preprocess`는 데이터셋 전처리 참고용으로 남겨두었습니다.
+
+## 인용
+
+이 프로젝트가 유용했다면 아래 형식으로 인용해 주세요.
+
+```bibtex
+@misc{speecht5_korean,
+  title        = {SpeechT5_Korean: Korean SpeechT5 Training and Inference Pipeline},
+  author       = {SpeechT5_Korean Contributors},
+  year         = {2026},
+  howpublished = {\url{https://github.com/hobi2k/SpeechT5_Korean}},
+  note         = {Accessed: 2026-02-12}
+}
+```
+
+## 참고 및 크레딧
+
+- Microsoft SpeechT5: https://github.com/microsoft/SpeechT5
+- Hugging Face `microsoft/speecht5_tts`: https://huggingface.co/microsoft/speecht5_tts
+- Hugging Face `microsoft/speecht5_hifigan`: https://huggingface.co/microsoft/speecht5_hifigan
+- Hugging Face `microsoft/wavlm-base-plus-sv`: https://huggingface.co/microsoft/wavlm-base-plus-sv

@@ -10,6 +10,7 @@ from datasets import DatasetDict
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+from huggingface_hub import snapshot_download
 from transformers import (
     SpeechT5ForTextToSpeech,
     SpeechT5HifiGan,
@@ -114,6 +115,31 @@ def _build_speaker_embedding(cfg: TrainingConfig, dataset, device: torch.device)
     return emb.squeeze().cpu()
 
 
+def _ensure_local_snapshot(repo_id: str, local_dir: Path) -> Path:
+    """
+    Hugging Face 모델 스냅샷을 로컬 폴더에 보장한다.
+
+    이미 로컬에 있으면 재다운로드하지 않는다.
+
+    Args:
+        repo_id: Hugging Face repo id.
+        local_dir: 로컬 저장 디렉터리.
+
+    Returns:
+        Path: 로컬 스냅샷 디렉터리 경로.
+    """
+    if (local_dir / "config.json").exists():
+        return local_dir
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_download(
+        repo_id=repo_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+    )
+    return local_dir
+
+
 @dataclass
 class _Collator:
     """
@@ -199,10 +225,21 @@ def run_training(cfg: TrainingConfig) -> Path:
     if len(ds) == 0:
         raise RuntimeError("Dataset is empty after audio filtering.")
 
-    # 3) 모델/프로세서 로드
-    processor = SpeechT5Processor.from_pretrained(cfg.model_name)
-    model = SpeechT5ForTextToSpeech.from_pretrained(cfg.model_name)
-    vocoder = SpeechT5HifiGan.from_pretrained(cfg.vocoder_name)
+    # 3) 사전학습 모델을 프로젝트 내부 pretrained 폴더에 보장한다.
+    # 항상 프로젝트 루트의 pretrained 디렉터리를 사용한다.
+    pretrained_root = Path(__file__).resolve().parent.parent / "pretrained"
+    tts_local = _ensure_local_snapshot(cfg.model_name, pretrained_root / "speecht5_tts")
+    vocoder_local = _ensure_local_snapshot(cfg.vocoder_name, pretrained_root / "speecht5_hifigan")
+    spk_local = _ensure_local_snapshot(cfg.speaker_model_name, pretrained_root / "wavlm_base_plus_sv")
+    print(f"Using local pretrained assets from: {pretrained_root}")
+
+    # speaker embedding 함수는 cfg.speaker_model_name을 참조하므로 로컬 경로로 치환한다.
+    cfg.speaker_model_name = str(spk_local)
+
+    # 4) 모델/프로세서 로드 (로컬 pretrained 경로 기반)
+    processor = SpeechT5Processor.from_pretrained(str(tts_local))
+    model = SpeechT5ForTextToSpeech.from_pretrained(str(tts_local))
+    vocoder = SpeechT5HifiGan.from_pretrained(str(vocoder_local))
 
     # 커스텀 tokenizer를 SpeechT5 processor/model에 연결.
     processor.tokenizer = tokenizer
@@ -430,9 +467,9 @@ def run_training(cfg: TrainingConfig) -> Path:
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     scaler = torch.amp.GradScaler(enabled=(cfg.device.type == "cuda"))
 
-    best = float("inf")
-    best_ckpt = cfg.output_dir / "best_model.pth"
     last_ckpt = cfg.output_dir / "checkpoint_last.pt"
+    periodic_dir = cfg.output_dir / "checkpoints"
+    periodic_dir.mkdir(parents=True, exist_ok=True)
 
     start_epoch = 1
     if cfg.resume:
@@ -443,11 +480,10 @@ def run_training(cfg: TrainingConfig) -> Path:
             scaler_state = ckpt.get("scaler")
             if scaler_state:
                 scaler.load_state_dict(scaler_state)
-            best = float(ckpt.get("best", best))
             start_epoch = int(ckpt.get("epoch", 0)) + 1
             print(
                 f"[Resume] loaded {last_ckpt} | "
-                f"last_epoch={start_epoch - 1} next_epoch={start_epoch} best={best:.4f}"
+                f"last_epoch={start_epoch - 1} next_epoch={start_epoch}"
             )
         else:
             print(f"[Resume] checkpoint not found: {last_ckpt}. Start from epoch 1.")
@@ -481,11 +517,22 @@ def run_training(cfg: TrainingConfig) -> Path:
         val_loss = val_total / max(len(val_dl), 1)
         print(f"[{epoch}] train={tr_loss:.4f} | val={val_loss:.4f}")
 
-        # 검증 손실 기준 best checkpoint 저장.
-        if val_loss < best:
-            best = val_loss
-            torch.save(model.state_dict(), best_ckpt)
-            print(f"  -> New best saved to {best_ckpt}")
+        # 주기 저장: save_every_n_epochs마다 HF 모델 디렉터리를 저장한다.
+        if cfg.save_every_n_epochs > 0 and (epoch % cfg.save_every_n_epochs == 0):
+            periodic_model_dir = periodic_dir / f"epoch_{epoch:06d}"
+            periodic_model_dir.mkdir(parents=True, exist_ok=True)
+            model.save_pretrained(periodic_model_dir)
+            print(f"  -> Periodic model saved to {periodic_model_dir}")
+
+            # 최대 보관 개수를 넘기면 가장 오래된 주기 모델 디렉터리부터 삭제한다.
+            periodic_models = sorted(
+                p for p in periodic_dir.glob("epoch_*") if p.is_dir()
+            )
+            overflow = len(periodic_models) - cfg.max_periodic_checkpoints
+            if overflow > 0:
+                for old_model_dir in periodic_models[:overflow]:
+                    shutil.rmtree(old_model_dir, ignore_errors=True)
+                    print(f"  -> Removed old periodic model: {old_model_dir}")
 
         # 매 epoch 마지막 상태를 저장하여 언제든 이어서 학습 가능하게 한다.
         torch.save(
@@ -494,17 +541,13 @@ def run_training(cfg: TrainingConfig) -> Path:
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict() if cfg.device.type == "cuda" else None,
                 "epoch": epoch,
-                "best": best,
+                "best": None,
             },
             last_ckpt,
         )
         print(f"  -> Last checkpoint saved to {last_ckpt}")
 
-    # 14) best checkpoint 로드 후 모델 가중치 최종 저장.
-    if best_ckpt.exists():
-        model.load_state_dict(torch.load(best_ckpt, map_location=cfg.device))
-    else:
-        print(f"[WARN] best checkpoint not found: {best_ckpt}. Saving current model state.")
+    # 14) 마지막 epoch 상태를 최종 모델 아티팩트로 저장.
     model.to(cfg.device).eval()
 
     # model artifacts (after training)

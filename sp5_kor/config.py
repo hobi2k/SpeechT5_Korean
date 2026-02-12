@@ -48,6 +48,10 @@ class TrainingConfig:
     num_epochs: int = 100
     # output_dir/checkpoint_last.pt 기준으로 학습을 이어갈지 여부.
     resume: bool = False
+    # 주기 저장 주기(epoch). 10이면 10, 20, 30...에 저장한다.
+    save_every_n_epochs: int = 10
+    # 주기 저장 체크포인트 최대 보관 개수.
+    max_periodic_checkpoints: int = 5
     # AdamW 학습률.
     lr: float = 1e-4
     # AdamW weight decay.

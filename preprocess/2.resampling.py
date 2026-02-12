@@ -2,15 +2,13 @@
 import librosa
 # 오디오 파일 읽고 쓰는 라이브러리
 import soundfile as sf
-# 경로를 객체지향적으로 다루는 모듈
 from pathlib import Path
-# 반복문에 진행표시줄을 추가하는 라이브러리
 from tqdm import tqdm
 
-# 설정
 # 원본 wav 파일들이 있는 디렉토리 경로 (원래 샘플율 48kHz)
 SRC_DIR = Path("/mnt/d/tts_data/yae_ko/audio")
 # 리샘플링된 wav를 저장할 출력 디렉토리 경로 (목표 샘플율 16.00kHz)
+# data.py에서 리샘플링을 수행하긴 하지만, 미리 수행한다.
 DST_DIR = Path("/mnt/d/tts_data/yae_ko/sp5")
 
 # 목표 샘플링 레이트를 1600Hz로 설정
@@ -19,15 +17,12 @@ TARGET_SR = 16000
 # 출력 디렉토리 생성 (부모 폴더도 함께 생성, 이미 있으면 무시)
 DST_DIR.mkdir(parents=True, exist_ok=True)
 
-# 처리
 # SRC_DIR에서 모든 .wav 파일을 찾아 리스트로 변환
 wav_files = list(SRC_DIR.glob("*.wav"))
 # 발견된 wav 파일 개수를 출력 (f-string으로 동적 텍스트 삽입)
 print(f"Found {len(wav_files)} wav files")
 
-# 각 wav 파일을 순회 (tqdm으로 진행률 표시)
 for wav_path in tqdm(wav_files):
-    # 예외 처리 시작 (오류가 발생해도 프로그램이 중단되지 않도록)
     try:
         # 로드 (원 SR 자동 인식)
         # librosa.load로 오디오 파일 로드 및 리샘플링 시작
@@ -56,10 +51,7 @@ for wav_path in tqdm(wav_files):
             subtype="PCM_16"
         )
 
-    # 위 코드에서 어떤 오류가 발생하면 여기로 이동
     except Exception as e:
-        # 오류 메시지 출력 (파일명과 오류 내용)
         print(f"[SKIP] {wav_path.name} | {e}")
 
-# 모든 파일 처리 완료 메시지 출력
 print("Resampling completed.")

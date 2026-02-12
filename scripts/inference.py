@@ -4,8 +4,9 @@
 - model/tokenizer/vocoder/speaker_embedding을 로컬 경로에서 로드한다.
 - 텍스트 유틸(korean_text_utils.py)을 로드해 normalize/prosody를 적용한다.
 
-uv run scripts/inference_local.py \
+uv run scripts/inference.py \
   --model_dir /mnt/d/tts_data/yae_ko/sp5model \
+  --checkpoint_epoch 90 \
   --text "안녕하세요. 학습된 모델 추론 테스트입니다." \
   --out /mnt/d/tts_data/yae_ko/sp5model/test.wav
 """
@@ -64,6 +65,7 @@ def load_text_utils(model_dir: Path, text_utils_path: Path | None):
 
 def load_assets(
     model_dir: Path,
+    model_weights_dir: Path,
     vocoder_dir: Path | None,
     speaker_embedding_path: Path | None,
 ):
@@ -71,7 +73,8 @@ def load_assets(
     로컬 모델 추론에 필요한 에셋을 로드한다.
 
     Args:
-        model_dir: SpeechT5 모델/토크나이저가 저장된 디렉터리.
+        model_dir: tokenizer/vocoder/speaker embedding이 저장된 기본 디렉터리.
+        model_weights_dir: SpeechT5 가중치를 로드할 디렉터리.
         vocoder_dir: vocoder 디렉터리 경로. None이면 `model_dir/vocoder`.
         speaker_embedding_path: speaker embedding 파일 경로. None이면 `model_dir/speaker_embedding.pth`.
 
@@ -83,8 +86,8 @@ def load_assets(
     """
     print("Loading local model assets...")
 
-    # 모델/토크나이저 로드.
-    model = SpeechT5ForTextToSpeech.from_pretrained(model_dir).to(DEVICE).eval()
+    # 모델은 선택된 체크포인트(또는 기본 model_dir)에서 로드한다.
+    model = SpeechT5ForTextToSpeech.from_pretrained(model_weights_dir).to(DEVICE).eval()
     tokenizer = PreTrainedTokenizerFast.from_pretrained(model_dir)
 
     # vocoder 경로 해석.
@@ -112,6 +115,29 @@ def load_assets(
 
     print("Assets loaded.")
     return model, tokenizer, vocoder, spk_emb
+
+
+def resolve_model_weights_dir(model_dir: Path, checkpoint_epoch: int | None) -> Path:
+    """
+    모델 가중치를 로드할 디렉터리를 결정한다.
+
+    Args:
+        model_dir: 기본 모델 디렉터리.
+        checkpoint_epoch: 주기 저장 모델 epoch. None이면 기본 모델 디렉터리를 사용한다.
+
+    Returns:
+        Path: 실제 모델 가중치 로드 디렉터리.
+
+    Raises:
+        FileNotFoundError: 지정한 epoch 모델 디렉터리가 없을 때.
+    """
+    if checkpoint_epoch is None:
+        return model_dir
+
+    ckpt_dir = model_dir / "checkpoints" / f"epoch_{checkpoint_epoch:06d}"
+    if not ckpt_dir.exists():
+        raise FileNotFoundError(f"checkpoint model dir not found: {ckpt_dir}")
+    return ckpt_dir
 
 
 def tts(text: str, out_path: Path, model, tokenizer, vocoder, spk_emb, text_utils) -> None:
@@ -214,6 +240,12 @@ def parse_args() -> argparse.Namespace:
         help="합성할 텍스트",
     )
     parser.add_argument(
+        "--checkpoint_epoch",
+        type=int,
+        default=None,
+        help="주기 저장 모델 epoch 선택 (예: 40 -> model_dir/checkpoints/epoch_000040)",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=Path("demo_local.wav"),
@@ -233,10 +265,13 @@ def main() -> None:
         None
     """
     args = parse_args()
+    model_weights_dir = resolve_model_weights_dir(args.model_dir, args.checkpoint_epoch)
+    print(f"Selected model weights dir: {model_weights_dir}")
 
     text_utils = load_text_utils(args.model_dir, args.text_utils_path)
     model, tokenizer, vocoder, spk_emb = load_assets(
         args.model_dir,
+        model_weights_dir,
         args.vocoder_dir,
         args.speaker_embedding_path,
     )

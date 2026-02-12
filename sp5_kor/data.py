@@ -16,23 +16,23 @@ def load_jsonl_dataset(cfg: TrainingConfig) -> Dataset:
     JSONL 학습 메타데이터를 로드하고 오디오를 파형으로 변환해 반환한다.
 
     입력 JSONL 스키마는 다음 키를 반드시 포함해야 한다.
-    - `audio_path`
-    - `speaker`
-    - `language`
-    - `text`
+    - audio_path
+    - speaker
+    - language
+    - text
 
     처리 단계:
     1. JSONL 로드 및 필수 컬럼 검증
-    2. `audio_path`를 절대 경로로 해석
-    3. 오디오 파일 읽기(`soundfile`)
+    2. audio_path를 절대 경로로 해석
+    3. 오디오 파일 읽기(soundfile)
     4. 모노 변환 / float32 변환 / target_sr 리샘플
-    5. `max_audio_len` 초과 샘플 drop 처리
+    5. max_audio_len 초과 샘플 drop 처리
 
     Args:
         cfg: 학습 설정 객체. 경로, 샘플링레이트, 최대 길이, 병렬 처리 수를 사용한다.
 
     Returns:
-        Dataset: 오디오가 로드되어 `waveform(list[float])`, `sr(int)`가 추가된 데이터셋.
+        Dataset: 오디오가 로드되어 "waveform(list[float])", "sr(int)"가 추가된 데이터셋.
         길이 초과 또는 파일 누락 샘플은 제거된 상태로 반환한다.
 
     Raises:
@@ -58,10 +58,10 @@ def load_jsonl_dataset(cfg: TrainingConfig) -> Dataset:
 
         Returns:
             dict: 원본 샘플에 아래 필드를 추가/수정한 결과.
-            - `audio_path`: 절대/해석된 경로 문자열
-            - `waveform`: float32 1D 파형(list)
-            - `sr`: 샘플링레이트(int)
-            - `drop`: 제거 여부(bool)
+            - audio_path: 절대/해석된 경로 문자열
+            - waveform: float32 1D 파형(list)
+            - sr: 샘플링레이트(int)
+            - drop: 제거 여부(bool)
         """
         raw_path = Path(batch["audio_path"])
 

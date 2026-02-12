@@ -5,7 +5,7 @@ jamo_vocab_builder.py
 이 파일의 목적
 - "자모(초/중/종성) + 기호/숫자/단위/운율 토큰"으로 구성된 vocab(어휘 목록)을 만들어
   jamo_vocab.txt로 저장합니다.
-- 이 vocab은 “텍스트 -> 토큰 ID”로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
+- 이 vocab은 텍스트를 토큰 ID로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
 
 TTS에서의 vocab
 - 텍스트 입력을 토큰 시퀀스로 받는 TTS는, 입력 문장을 먼저 토큰화하여

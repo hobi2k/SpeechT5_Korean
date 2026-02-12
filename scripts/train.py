@@ -11,7 +11,8 @@ uv run python -m scripts.train \
   --min_tokens 5 \
   --max_tokens 200 \
   --min_token_per_sec 2.0 \
-  --max_token_per_sec 35.0
+  --max_token_per_sec 35.0 \
+  --num_epochs 100 \
   --resume
 """
 
@@ -48,7 +49,6 @@ def parse_args() -> argparse.Namespace:
         default=Path("./sp5_kor/text/jamo_vocab.txt"),
         help="Path to jamo vocab txt",
     )
-
     # 학습 하이퍼파라미터.
     p.add_argument("--num_epochs", type=int, default=50)
     p.add_argument("--batch_size", type=int, default=3)

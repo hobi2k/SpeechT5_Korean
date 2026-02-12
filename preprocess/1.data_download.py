@@ -50,10 +50,8 @@ for item in tqdm(dataset):
     # 데이터 항목에서 오디오 바이트 데이터 추출
     audio_bytes = item["audio"]["bytes"]
 
-    # 오디오 데이터가 없으면 (None이면)
+    # 오디오 데이터가 없으면 (None이면) 건너뜀
     if audio_bytes is None:
-        # 일부 샘플 방어
-        # 현재 반복 건너뛰고 다음 항목으로 진행
         continue
 
     # wav 파일을 바이너리 쓰기 모드로 열기
