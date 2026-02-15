@@ -138,10 +138,6 @@ uv run scripts/inference.py \
 - `checkpoint_last.pt` (매 epoch 마지막 상태: model/optimizer/scaler/epoch)
 - `checkpoints/epoch_XXXXXX/` (10 epoch 단위 HF 모델 저장, 최대 5개 유지)
 
-## 주의
-
-`preprocess`는 데이터셋 전처리 참고용으로 남겨두었습니다.
-
 ## 인용
 
 이 프로젝트가 유용했다면 아래 형식으로 인용해 주세요.
