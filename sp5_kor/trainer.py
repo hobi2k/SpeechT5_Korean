@@ -55,7 +55,7 @@ def _compute_max_frames(processor: SpeechT5Processor, max_audio_len: int) -> int
 
     Args:
         processor: SpeechT5Processor. feature_extractor의 sr/hop_length를 사용한다.
-        max_audio_len: 최대 오디오 길이(초).
+        max_audio_len: 최대 오디오 길이(초)
 
     Returns:
         int: mel frame 상한.
@@ -70,13 +70,15 @@ def _resolve_max_frames(processor: SpeechT5Processor, model: SpeechT5ForTextToSp
 
     Args:
         processor: SpeechT5Processor. frame 계산에 필요한 sr/hop_length를 제공한다.
-        model: SpeechT5 모델. `config.max_speech_positions` 한도를 참조한다.
-        max_audio_len: 사용자 설정 최대 오디오 길이(초).
+        model: SpeechT5 모델. config.max_speech_positions 한도를 참조한다.
+        max_audio_len: 사용자 설정 최대 오디오 길이(초)
 
     Returns:
-        int: 모델이 처리 가능한 최종 max_frames.
+        int: 모델이 처리 가능한 최종 max_frames
     """
+    # 계산된 max_frames
     computed = _compute_max_frames(processor, max_audio_len)
+    # 모델 한도와 비교해 더 작은 값으로 조정
     model_limit = int(getattr(model.config, "max_speech_positions", computed))
     resolved = min(computed, model_limit)
     if resolved < computed:
@@ -90,13 +92,12 @@ def _resolve_max_frames(processor: SpeechT5Processor, model: SpeechT5ForTextToSp
 def _build_speaker_embedding(cfg: TrainingConfig, dataset, device: torch.device) -> torch.Tensor:
     """
     단일 화자 기준 reference speaker embedding을 생성한다.
-
     첫 번째 샘플의 waveform을 이용해 WavLM X-Vector를 추출하고 정규화한다.
 
     Args:
-        cfg: 학습 설정. target_sr, speaker model 이름을 사용한다.
-        dataset: waveform 컬럼을 포함한 데이터셋.
-        device: speaker model을 올릴 디바이스(CPU 권장).
+        cfg: 학습 설정. target_sr, speaker model 이름을 사용한다
+        dataset: waveform 컬럼을 포함한 데이터셋
+        device: speaker model을 올릴 디바이스
 
     Returns:
         torch.Tensor: shape=(emb_dim,)인 정규화된 speaker embedding (CPU 텐서).
@@ -112,7 +113,7 @@ def _build_speaker_embedding(cfg: TrainingConfig, dataset, device: torch.device)
         emb = spk_model(**inputs).embeddings
         emb = torch.nn.functional.normalize(emb, dim=-1)
 
-    return emb.squeeze().cpu()
+    return emb.squeeze().cpu()  # [1, 512] -> [512]
 
 
 def _ensure_local_snapshot(repo_id: str, local_dir: Path) -> Path:
@@ -122,11 +123,11 @@ def _ensure_local_snapshot(repo_id: str, local_dir: Path) -> Path:
     이미 로컬에 있으면 재다운로드하지 않는다.
 
     Args:
-        repo_id: Hugging Face repo id.
-        local_dir: 로컬 저장 디렉터리.
+        repo_id: Hugging Face repo id
+        local_dir: 로컬 저장 디렉터리
 
     Returns:
-        Path: 로컬 스냅샷 디렉터리 경로.
+        Path: 로컬 스냅샷 디렉터리 경로
     """
     if (local_dir / "config.json").exists():
         return local_dir
@@ -143,13 +144,14 @@ def _ensure_local_snapshot(repo_id: str, local_dir: Path) -> Path:
 @dataclass
 class _Collator:
     """
-    TTS 학습용 배치 콜레이터.
+    TTS 학습용 배치 콜레이터
 
     Attributes:
-        pad_token_id: tokenizer의 pad token id.
+        pad_token_id: tokenizer의 pad token id
         spk_emb: 단일 화자 embedding. 배치 크기만큼 복제해 사용한다.
     """
 
+    # 모델 입력 배치 텐서로 변환할 때 사용할 패딩 토큰 ID의 입력 필드 정의
     pad_token_id: int
     spk_emb: torch.Tensor
 
@@ -161,26 +163,26 @@ class _Collator:
             features: 데이터셋 샘플 목록. 각 샘플은 input_ids/labels를 포함한다.
 
         Returns:
-            dict: 모델 forward 입력 딕셔너리.
+            dict: 모델 forward 입력 딕셔너리
             - input_ids: LongTensor [B, T]
             - attention_mask: LongTensor [B, T]
             - labels: FloatTensor [B, F, M]
             - speaker_embeddings: FloatTensor [B, emb_dim]
         """
-        # input_ids를 배치 내 최대 길이에 맞춰 padding.
+        # input_ids를 배치 내 최대 길이에 맞춰 padding
         input_ids = [torch.tensor(f["input_ids"], dtype=torch.long) for f in features]
         input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.pad_token_id)
 
-        # pad 위치를 제외한 attention mask 생성.
+        # pad 위치를 제외한 attention mask 생성
         attention_mask = (input_ids != self.pad_token_id).long()
 
-        # mel labels 스택.
+        # mel labels 스택
         labels = torch.stack([torch.tensor(f["labels"], dtype=torch.float32) for f in features])
 
-        # 0.0 패딩 프레임을 손실 제외 값(-100)으로 치환.
+        # 0.0 패딩 프레임을 손실 제외 값(-100)으로 치환
         labels = labels.masked_fill(labels.eq(0.0), -100.0)
 
-        # 단일 화자 embedding을 배치 크기만큼 복제.
+        # 단일 화자 embedding을 배치 크기만큼 복제
         spk = self.spk_emb.unsqueeze(0).repeat(len(features), 1)
 
         return {
@@ -205,28 +207,27 @@ def run_training(cfg: TrainingConfig) -> Path:
     7. best checkpoint 로드 후 모델 가중치 저장
 
     Args:
-        cfg: 학습 설정 객체.
+        cfg: 학습 설정 객체
 
     Returns:
-        Path: 최종 아티팩트가 저장된 출력 디렉터리 경로.
+        Path: 최종 아티팩트가 저장된 출력 디렉터리 경로
 
     Raises:
-        RuntimeError: 필터 후 데이터셋이 비어 학습이 불가능한 경우.
+        RuntimeError: 필터 후 데이터셋이 비어 학습이 불가능한 경우
     """
     _seed_all(cfg.seed)
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) tokenizer 준비
+    # 1. tokenizer 준비
     tokenizer = build_tokenizer(cfg.jamo_vocab_path, cfg.output_dir)
     print("Tokenizer vocab size:", len(tokenizer))
 
-    # 2) 데이터셋 로드
+    # 2. 데이터셋 로드
     ds = load_jsonl_dataset(cfg)
     if len(ds) == 0:
         raise RuntimeError("Dataset is empty after audio filtering.")
 
-    # 3) 사전학습 모델을 프로젝트 내부 pretrained 폴더에 보장한다.
-    # 항상 프로젝트 루트의 pretrained 디렉터리를 사용한다.
+    # 3. 사전학습 모델을 프로젝트 내부 pretrained 폴더에 다운로드한다.
     pretrained_root = Path(__file__).resolve().parent.parent / "pretrained"
     tts_local = _ensure_local_snapshot(cfg.model_name, pretrained_root / "speecht5_tts")
     vocoder_local = _ensure_local_snapshot(cfg.vocoder_name, pretrained_root / "speecht5_hifigan")
@@ -236,7 +237,7 @@ def run_training(cfg: TrainingConfig) -> Path:
     # speaker embedding 함수는 cfg.speaker_model_name을 참조하므로 로컬 경로로 치환한다.
     cfg.speaker_model_name = str(spk_local)
 
-    # 4) 모델/프로세서 로드 (로컬 pretrained 경로 기반)
+    # 4. 모델/프로세서 로드 (로컬 pretrained 경로 기반)
     processor = SpeechT5Processor.from_pretrained(str(tts_local))
     model = SpeechT5ForTextToSpeech.from_pretrained(str(tts_local))
     vocoder = SpeechT5HifiGan.from_pretrained(str(vocoder_local))
@@ -254,12 +255,12 @@ def run_training(cfg: TrainingConfig) -> Path:
     max_frames = _resolve_max_frames(processor, model, cfg.max_audio_len)
     print("Resolved MAX_FRAMES:", max_frames)
 
-    # 4) speaker embedding (CPU 고정 권장).
+    # 4. speaker embedding
     ref_spk_emb = _build_speaker_embedding(cfg, ds, torch.device("cpu"))
     print("Speaker embedding shape:", tuple(ref_spk_emb.shape))
 
-    # 5) 학습 전에 고정 아티팩트 저장.
-    # 중간 중단 시에도 로컬 추론 smoke test를 할 수 있게 한다.
+    # 5. 학습 전에 고정 아티팩트 저장
+    # 중간 중단 시에도 로컬 추론으로 품질 테스트를 할 수 있게 한다.
     model.config.speaker_embedding_path = "speaker_embedding.pth"
     model.config.save_pretrained(cfg.output_dir)
     if getattr(model, "generation_config", None) is not None:
@@ -282,7 +283,7 @@ def run_training(cfg: TrainingConfig) -> Path:
             batch: 단일 샘플(dict). text/waveform을 포함한다.
 
         Returns:
-            dict: keep/drop 판단 및 로그 통계를 담은 메타 필드.
+            dict: keep/drop 판단 및 로그 통계를 담은 메타 필드
             - _keep: 유지 여부
             - _drop_reason: 제거 사유 문자열
             - _audio_sec: 오디오 길이(초)
@@ -327,10 +328,10 @@ def run_training(cfg: TrainingConfig) -> Path:
             "_token_per_sec": float(token_per_sec),
         }
 
-    # 6) alignment 필터 메타 생성.
+    # 6. alignment 필터 메타 생성
     ds = ds.map(_alignment_guard, num_proc=max(cfg.num_proc, 1))
 
-    # 7) 필터 로그 출력.
+    # 7. 필터 로그 출력
     total_before = len(ds)
     reasons = Counter(ds["_drop_reason"])
     kept_before_filter = reasons.get("keep", 0)
@@ -363,7 +364,7 @@ def run_training(cfg: TrainingConfig) -> Path:
             f"p95={np.percentile(kept_tps, 95):.2f} max={max(kept_tps):.2f}"
         )
 
-    # 8) keep 샘플만 남기고 임시 메타 컬럼 제거.
+    # 8. keep 샘플만 남기고 임시 메타 컬럼 제거
     ds = ds.filter(lambda x: x["_keep"])
     ds = ds.remove_columns(["_keep", "_drop_reason", "_audio_sec", "_token_len", "_token_per_sec"])
     if len(ds) == 0:
@@ -409,7 +410,7 @@ def run_training(cfg: TrainingConfig) -> Path:
                 "labels": np.zeros((1, n_mels), dtype=np.float32),
             }
 
-        # 허용 길이보다 짧으면 우측 패딩한다. (truncate는 하지 않음)
+        # 허용 길이보다 짧으면 우측 패딩
         if mel.shape[0] < max_frames:
             n_mels = mel.shape[1]
             pad = np.zeros((max_frames - mel.shape[0], n_mels), dtype=np.float32)
@@ -423,10 +424,10 @@ def run_training(cfg: TrainingConfig) -> Path:
             "labels": mel,
         }
 
-    # 9) 학습 입력셋 생성.
+    # 9. 학습 입력셋 생성
     model_ds = ds.map(_preprocess, remove_columns=ds.column_names)
 
-    # 9-1) preprocess 단계 frame 필터 로그 출력.
+    # 9-1. preprocess 단계 frame 필터 로그 출력
     pre_reasons = Counter(model_ds["_drop_preprocess_reason"])
     pre_kept = pre_reasons.get("keep", 0)
     print(
@@ -444,7 +445,7 @@ def run_training(cfg: TrainingConfig) -> Path:
     if len(model_ds) == 0:
         raise RuntimeError("Dataset became empty after preprocess frame filter.")
 
-    # 10) train/test 분할.
+    # 10. train/test 분할
     split = int(len(model_ds) * cfg.train_ratio)
     split = min(max(split, 1), len(model_ds) - 1) if len(model_ds) > 1 else 1
     if len(model_ds) == 1:
@@ -458,12 +459,12 @@ def run_training(cfg: TrainingConfig) -> Path:
         )
     print("Train size:", len(tts["train"]), "| Test size:", len(tts["test"]))
 
-    # 11) DataLoader 구성.
+    # 11. DataLoader 구성
     collator = _Collator(pad_token_id=tokenizer.pad_token_id, spk_emb=ref_spk_emb)
     train_dl = DataLoader(tts["train"], batch_size=cfg.batch_size, shuffle=True, collate_fn=collator)
     val_dl = DataLoader(tts["test"], batch_size=cfg.batch_size, shuffle=False, collate_fn=collator)
 
-    # 12) optimizer / scaler 준비.
+    # 12. optimizer / scaler 준비.
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     scaler = torch.amp.GradScaler(enabled=(cfg.device.type == "cuda"))
 
@@ -488,7 +489,7 @@ def run_training(cfg: TrainingConfig) -> Path:
         else:
             print(f"[Resume] checkpoint not found: {last_ckpt}. Start from epoch 1.")
 
-    # 13) 학습/검증 루프.
+    # 13. 학습/검증 루프
     for epoch in range(start_epoch, cfg.num_epochs + 1):
         model.train()
         tr_total = 0.0
@@ -496,11 +497,15 @@ def run_training(cfg: TrainingConfig) -> Path:
             b = {k: v.to(cfg.device) for k, v in b.items()}
 
             optimizer.zero_grad(set_to_none=True)
+            # AMP 자동 캐스트 컨텍스트에서 모델 forward를 실행
             with torch.amp.autocast(device_type=cfg.device.type, enabled=(cfg.device.type == "cuda")):
                 out = model(**b)
 
+            # loss를 스케일링해서 역전파
             scaler.scale(out.loss).backward()
+            # 스케일링된 그레디언트를 처리 후 가중치 업데이트
             scaler.step(optimizer)
+            # 스케일 값 조정
             scaler.update()
             tr_total += float(out.loss.item())
 
@@ -547,10 +552,10 @@ def run_training(cfg: TrainingConfig) -> Path:
         )
         print(f"  -> Last checkpoint saved to {last_ckpt}")
 
-    # 14) 마지막 epoch 상태를 최종 모델 아티팩트로 저장.
+    # 14. 마지막 epoch 상태를 최종 모델 아티팩트로 저장
     model.to(cfg.device).eval()
 
-    # model artifacts (after training)
+    # model artifacts 
     model.save_pretrained(cfg.output_dir)
     print(f"Saved model weights to: {cfg.output_dir}")
     return cfg.output_dir

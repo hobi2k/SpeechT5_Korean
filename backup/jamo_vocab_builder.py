@@ -5,7 +5,7 @@ jamo_vocab_builder.py
 이 파일의 목적
 - "자모(초/중/종성) + 기호/숫자/단위/운율 토큰"으로 구성된 vocab(어휘 목록)을 만들어
   jamo_vocab.txt로 저장합니다.
-- 이 vocab은 “텍스트 -> 토큰 ID”로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
+- 이 vocab은 텍스트를 토큰 ID로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
 
 TTS에서의 vocab
 - 텍스트 입력을 토큰 시퀀스로 받는 TTS는, 입력 문장을 먼저 토큰화하여
@@ -15,6 +15,8 @@ TTS에서의 vocab
   - 자모 기반: 초/중/종성 조합으로 모든 한글을 표현 가능 -> vocab이 작고 일반화가 쉬움.
 - 또한 “쉼표, 물음표, 단위(km, kg), pause(짧은 쉼)” 같은 것을 별도 토큰으로 두면,
   모델이 운율/억양/리듬을 더 안정적으로 학습할 수 있습니다.
+
+uv run sp5_kor/text/jamo_vocab_builder.py
 """
 
 from pathlib import Path
@@ -56,7 +58,7 @@ JUNGSEONG = [chr(c) for c in range(0x1161, 0x1176)]
 # 종성(Jongseong): U+11A8 ~ U+11C2 (27개)
 JONGSEONG = [chr(c) for c in range(0x11A8, 0x11C3)]
 # - 종성은 받침 자모들로 구성됩니다.
-# - 여기서는 "받침 없음"은 별도 처리를 한다는 전제를 깔고,
+# - 여기서는 "받침 없음"은 별도 처리를 한다는 전제를 깔고(혹은 토크나이저가 처리),
 #   받침이 있는 경우의 자모만 vocab에 넣는 방식입니다.
 
 # 기호(PUNCT): 문장부호를 '문자 자체'가 아니라 '의미 토큰'으로 넣는 설계
@@ -78,7 +80,7 @@ NUM = ["<num>"]
 # 따라서 실제 파이프라인에서는:
 # (a) 전처리 단계에서 숫자를 한국어 발음으로 풀어쓰기
 # (b) 혹은 숫자 구간을 <num>으로 치환하고 별도 숫자 처리 모듈을 둠
-# 여기서는 (b)도 어느 정도 가능하도록 토큰을 준비한 형태입니다.
+# 여기서는 (b)도 가능하도록 토큰을 준비한 형태입니다.
 
 # 단위: 숫자+단위를 다룰 때의 의미 토큰
 UNITS = [
@@ -110,7 +112,7 @@ VOCAB = SPECIAL + CHOSEONG + JUNGSEONG + JONGSEONG + PUNCT + NUM + UNITS + PROSO
 #   (바꾸면 같은 텍스트가 다른 ID 시퀀스로 변해 모델이 망가집니다.)
 
 # vocab 저장 함수
-def save_vocab(path=Path("jamo_vocab.txt")):
+def save_vocab(path: Path | None = None):
     """
     VOCAB 리스트를 텍스트 파일로 저장합니다.
 
@@ -137,6 +139,9 @@ def save_vocab(path=Path("jamo_vocab.txt")):
     """
     # Path 객체든 문자열이든 open이 가능하지만,
     # 여기서는 명시적으로 Path를 기본값으로 사용했습니다.
+    if path is None:
+        path = Path(__file__).resolve().parent / "jamo_vocab.txt"
+
     with open(path, "w", encoding="utf-8") as f:
         for t in VOCAB:
             f.write(t + "\n")

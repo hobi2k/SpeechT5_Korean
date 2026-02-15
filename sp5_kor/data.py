@@ -78,21 +78,21 @@ def load_jsonl_dataset(cfg: TrainingConfig) -> Dataset:
         # 오디오 로드.
         arr, sr = sf.read(str(wav_path))
 
-        # 채널 차원 정규화.
+        # 채널 차원 정규화
         arr = np.asarray(arr)
         if arr.ndim == 2:
-            # stereo/multi-channel -> mono 평균.
+            # stereo/multi-channel -> mono 평균
             arr = arr.mean(axis=-1)
 
-        # 모델 입력 일관성을 위해 float32 1D로 고정한다.
+        # 모델 입력 일관성을 위해 float32 1D로 고정
         arr = np.asarray(arr, dtype=np.float32).reshape(-1)
 
-        # 샘플레이트가 다르면 target_sr로 리샘플한다.
+        # 샘플레이트가 다르면 target_sr로 리샘플
         if sr != cfg.target_sr:
             arr = librosa.resample(arr, orig_sr=sr, target_sr=cfg.target_sr).astype(np.float32)
             sr = cfg.target_sr
 
-        # 길이 초과 샘플은 자르지 않고 drop 처리한다.
+        # 길이 초과 샘플은 자르지 않고 drop 처리
         max_len = int(cfg.max_audio_len * sr)
         too_long = len(arr) > max_len
 
@@ -102,9 +102,9 @@ def load_jsonl_dataset(cfg: TrainingConfig) -> Dataset:
         batch["audio_path"] = str(wav_path)
         return batch
 
-    # 샘플 단위 오디오 로딩/정규화.
+    # 샘플 단위 오디오 로딩/정규화
     ds = ds.map(_resolve_and_load, num_proc=max(cfg.num_proc, 1))
 
-    # drop 플래그가 True인 샘플 제거.
+    # drop 플래그가 True인 샘플 제거
     ds = ds.filter(lambda x: not x.get("drop", False))
     return ds

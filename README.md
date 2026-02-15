@@ -82,6 +82,7 @@ uv run scripts/train.py \
 - `--num_epochs`는 \"추가 에폭\"이 아니라 \"최종 목표 epoch\"입니다.
 - 예: 이전에 50 epoch까지 끝났고 `--num_epochs 80 --resume`이면 51~80만 추가로 학습합니다.
 - 사전학습 모델(`speecht5_tts`, `speecht5_hifigan`, `wavlm-base-plus-sv`)은 첫 실행 시 프로젝트 루트 `pretrained/` 아래로 다운로드되고 이후 재사용됩니다.
+- 중간 저장 모델은 `checkpoints/epoch_XXXXXX/`(HF 모델 디렉터리) 형식으로 보관되며, 추론 시 `--checkpoint_epoch`로 선택할 수 있습니다.
 
 학습 시 필터 로그가 출력됩니다.
 - 전체/유지/제거 샘플 수
@@ -148,10 +149,10 @@ uv run scripts/inference.py \
 ```bibtex
 @misc{speecht5_korean,
   title        = {SpeechT5_Korean: Korean SpeechT5 Training and Inference Pipeline},
-  author       = {SpeechT5_Korean Contributors},
+  author       = {안호성 (GitHub: hobi2k)},
   year         = {2026},
   howpublished = {\url{https://github.com/hobi2k/SpeechT5_Korean}},
-  note         = {Accessed: 2026-02-12}
+  note         = {Hugging Face: https://huggingface.co/ahnhs2k, Accessed: 2026-02-15}
 }
 ```
 

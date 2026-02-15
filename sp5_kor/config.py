@@ -59,7 +59,7 @@ class TrainingConfig:
     # 랜덤 시드.
     seed: int = 42
 
-    # Base model options
+    # Pretrained model options
     # SpeechT5 기반 모델 ID.
     model_name: str = "microsoft/speecht5_tts"
     # Vocoder 모델 ID.
