@@ -151,7 +151,7 @@ uv run scripts/inference.py \
   title        = {SpeechT5_Korean: Korean SpeechT5 Training and Inference Pipeline},
   author       = {안호성 (GitHub: hobi2k)},
   year         = {2026},
-  howpublished = {\url{https://github.com/hobi2k/SpeechT5_Korean}},
+  url          = {https://github.com/hobi2k/SpeechT5_Korean},
   note         = {Hugging Face: https://huggingface.co/ahnhs2k, Accessed: 2026-02-15}
 }
 ```
