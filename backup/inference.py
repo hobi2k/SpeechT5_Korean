@@ -36,8 +36,6 @@ from transformers import (
 
 from huggingface_hub import hf_hub_download
 
-# 사용자 설정
-
 # Hugging Face Hub에 업로드한 모델 ID
 # (model, tokenizer, speaker_embedding, korean_text_utils.py가 모두 여기에 있음)
 MODEL_ID = "ahnhs2k/speecht5-korean-jamo"
@@ -87,7 +85,7 @@ spec.loader.exec_module(korean_text_utils)
 
 # 필요한 텍스트 유틸 함수 로드
 
-# 훈련용 placeholder 전처리 (※ 이 스크립트에서는 직접 사용하지 않지만 포함)
+# 훈련용 placeholder 전처리
 inject_tokens_for_training = korean_text_utils.inject_tokens_for_training
 
 # placeholder(<num>, <comma> 등)를 보존하면서 한글을 자모로 분해

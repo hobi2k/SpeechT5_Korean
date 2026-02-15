@@ -1,106 +1,164 @@
 # SpeechT5_Korean
 
-한국어 TTS를 위해 `SpeechT5`를 자모(Jamo) 기반 토크나이저로 학습/추론하는 프로젝트입니다.
+본 프로젝트는 SpeechT5 한글화 프로젝트입니다.
+TTS 학습과 실험용으로 제작되었습니다.
 
-현재 기준 메인 실행 파일은 단일 스크립트 기반입니다.
-- 학습: `train_speecht5.py`
-- 추론: `inference.py`
-- 자모 vocab 생성: `jamo_vocab_builder.py`
-- 텍스트 전처리 유틸: `korean_text_utils.py`
+현재 메인 엔트리:
+- 학습: `scripts/train.py`
+- 추론: `scripts/inference.py`
+- 텍스트/자모 유틸: `sp5_kor/text/`
 
 ## 프로젝트 구조
 
-`SpeechT5_Korean/` 기준 주요 파일:
-- `train_speecht5.py`: KSS 데이터셋 로드, 전처리, 학습, 체크포인트 저장, Hub 업로드
-- `inference.py`: Hub에서 모델/토크나이저/speaker embedding 로드 후 음성 합성
-- `jamo_vocab_builder.py`: `jamo_vocab.txt` 생성
-- `korean_text_utils.py`: 숫자/단위/구두점 처리, 자모 분해, prosody 분할 유틸
-- `jamo_vocab.txt`: 학습에 사용하는 자모 vocab (이미 생성되어 있음)
-- `requirements.txt`, `pyproject.toml`, `uv.lock`: 의존성 관리
-- `train_speecht5_backup.py`, `train_speecht5_test.py`, `backup/`: 실험/백업 파일
-- `spt5_kor/`: 현재 빈 패키지(미사용)
+핵심 디렉터리:
+- `sp5_kor/config.py`: 학습 설정 dataclass
+- `sp5_kor/data.py`: JSONL 로드 + 오디오 로딩/리샘플/필터링
+- `sp5_kor/tokenizer.py`: `jamo_vocab.txt` 기반 tokenizer 생성
+- `sp5_kor/trainer.py`: 전처리/학습/검증/아티팩트 저장
+- `sp5_kor/text/jamo_vocab_builder.py`: 자모 vocab 생성
+- `sp5_kor/text/korean_text_utils.py`: 텍스트 정규화/placeholder/자모 분해
+- `scripts/train.py`: JSONL 학습 CLI
+- `scripts/inference.py`: 로컬 모델 추론 CLI
+- `pretrained/`: Hugging Face 사전학습 모델 로컬 캐시 디렉터리
 
-## 현재 동작 요약
+## JSONL 데이터셋 포맷
 
-`train_speecht5.py`는 아래를 수행합니다.
-1. `jamo_vocab.txt`를 로드해 `PreTrainedTokenizerFast` 구성
-2. `Bingsu/KSS_Dataset` 로드 후 오디오 리샘플링/길이 필터링
-3. WavLM 기반 단일 화자 speaker embedding 추출
-4. 텍스트를 placeholder + 자모 시퀀스로 변환
-5. SpeechT5 학습 후 best checkpoint 저장
-6. 모델/토크나이저/vocoder/speaker embedding 저장
-7. 모델 카드 및 demo 스크립트 생성
-8. Hugging Face Hub로 업로드
+각 라인은 아래 키를 포함해야 합니다.
+- `audio_path`
+- `speaker`
+- `language`
+- `text`
 
-주의:
-- 학습 스크립트는 마지막에 `create_and_push_to_hub()`를 호출합니다.
-- Hub 업로드를 원치 않으면 스크립트 수정이 필요합니다.
+예시:
+```json
+{"audio_path":"wavs/0001.wav","speaker":"spk1","language":"ko","text":"안녕하세요"}
+```
+
+`audio_path` 해석 규칙:
+- 절대경로면 그대로 사용
+- 상대경로면 JSONL 파일이 있는 디렉터리 기준으로 해석
 
 ## 환경 준비
 
-Python:
-- `>=3.11`
-
-의존성 설치(`uv`):
 ```bash
 cd SpeechT5_Korean
-uv sync --prerelease=allow
+uv sync
 ```
 
-PyTorch (RTX 50 계열 권장):
-- 현재 의존성은 nightly/cu128 계열을 허용하도록 설정되어 있습니다.
-- 예시:
+RTX 50 계열이면 torch nightly/cu128 권장
+
 ```bash
 uv pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 ```
 
-추가 참고:
-- `datasets`의 `Audio(decode=True)` 사용 시 `torchcodec`가 필요할 수 있습니다.
-- 시스템 FFmpeg/torchcodec/PyTorch 조합이 맞지 않으면 audio decode 단계에서 실패할 수 있습니다.
+## 실행
 
-## 실행 방법
+1. 학습 실행
 
-### 1) 자모 vocab 생성(필요 시)
 ```bash
 cd SpeechT5_Korean
-uv run jamo_vocab_builder.py
+uv run scripts/train.py \
+  --jsonl_path /path/to/train.jsonl \
+  --output_dir /path/to/output_model \
+  --min_audio_len 0.8 \
+  --max_audio_len 10 \
+  --min_tokens 5 \
+  --max_tokens 200 \
+  --min_token_per_sec 2.0 \
+  --max_token_per_sec 35.0
 ```
 
-### 2) 학습
+중단 후 이어서 학습
+
+```bash
+uv run scripts/train.py \
+  --jsonl_path /path/to/train.jsonl \
+  --output_dir /path/to/output_model \
+  --num_epochs 80 \
+  --resume
+```
+
+주의:
+- `--num_epochs`는 \"추가 에폭\"이 아니라 \"최종 목표 epoch\"입니다.
+- 예: 이전에 50 epoch까지 끝났고 `--num_epochs 80 --resume`이면 51~80만 추가로 학습합니다.
+- 사전학습 모델(`speecht5_tts`, `speecht5_hifigan`, `wavlm-base-plus-sv`)은 첫 실행 시 프로젝트 루트 `pretrained/` 아래로 다운로드되고 이후 재사용됩니다.
+- 중간 저장 모델은 `checkpoints/epoch_XXXXXX/`(HF 모델 디렉터리) 형식으로 보관되며, 추론 시 `--checkpoint_epoch`로 선택할 수 있습니다.
+
+학습 시 필터 로그가 출력됩니다.
+- 전체/유지/제거 샘플 수
+- 제거 사유별 카운트
+- 유지 샘플 분포(`audio_sec`, `token_len`, `token_per_sec`의 min/p50/p95/max)
+
+2. 로컬 추론
+
 ```bash
 cd SpeechT5_Korean
-uv run train_speecht5.py
+uv run scripts/inference.py \
+  --model_dir /path/to/output_model \
+  --text "안녕하세요. 로컬 추론 테스트입니다." \
+  --out out.wav
 ```
 
-학습 스킵(아티팩트 저장/업로드 파이프라인 점검):
+10 epoch 주기 저장 모델 중 특정 epoch를 선택해 추론할 수 있습니다.
+
 ```bash
-cd SpeechT5_Korean
-uv run train_speecht5.py --skip_train
+uv run scripts/inference.py \
+  --model_dir /path/to/output_model \
+  --checkpoint_epoch 40 \
+  --text "40 epoch 체크포인트 모델로 추론합니다." \
+  --out out_epoch40.wav
 ```
 
-### 3) 추론
+추론 경로를 직접 지정할 수도 있습니다.
+
 ```bash
-cd SpeechT5_Korean
-uv run inference.py
+uv run scripts/inference.py \
+  --model_dir /path/to/output_model \
+  --text_utils_path /path/to/output_model/korean_text_utils.py \
+  --vocoder_dir /path/to/output_model/vocoder \
+  --speaker_embedding_path /path/to/output_model/speaker_embedding.pth
 ```
 
-## 데이터셋
+## 저장 아티팩트
 
-현재 학습 코드는 아래 데이터셋을 하드코딩해 사용합니다.
-- `Bingsu/KSS_Dataset` (Hugging Face Datasets)
+`--output_dir` 저장 타이밍:
+- 학습 시작 전(고정 아티팩트): `config/generation_config/tokenizer/vocoder/utils/speaker_embedding`
+- 학습 완료 후: 모델 가중치
 
-로컬 JSONL 학습 파이프라인은 아직 메인 스크립트에 반영되지 않았습니다.
-
-## 출력 아티팩트
-
-기본 저장 경로:
-- `speecht5_kss_korean_jamo/`
-
-주요 산출물:
-- 학습 모델 가중치/설정
-- `tokenizer.json` 및 tokenizer 관련 파일
-- `vocoder/`
+생성 파일:
+- 모델 파일 (`model.safetensors` 등)
+- `config.json`
+- `generation_config.json`
+- `tokenizer.json`
+- `tokenizer_config.json`
+- `special_tokens_map.json`
+- `korean_text_utils.py`
 - `speaker_embedding.pth`
-- `korean_text_utils.py` 복사본
-- `README.md`(자동 생성 모델 카드)
-- `demo_inference.py`
+- `vocoder/`
+- `checkpoint_last.pt` (매 epoch 마지막 상태: model/optimizer/scaler/epoch)
+- `checkpoints/epoch_XXXXXX/` (10 epoch 단위 HF 모델 저장, 최대 5개 유지)
+
+## 주의
+
+`preprocess`는 데이터셋 전처리 참고용으로 남겨두었습니다.
+
+## 인용
+
+이 프로젝트가 유용했다면 아래 형식으로 인용해 주세요.
+
+```bibtex
+@misc{speecht5_korean,
+  title        = {SpeechT5_Korean: Korean SpeechT5 Training and Inference Pipeline},
+  author       = {안호성 (GitHub: hobi2k)},
+  year         = {2026},
+  url          = {https://github.com/hobi2k/SpeechT5_Korean},
+  note         = {Hugging Face: https://huggingface.co/ahnhs2k, Accessed: 2026-02-15}
+}
+```
+
+## 참고 및 크레딧
+
+- Microsoft SpeechT5: https://github.com/microsoft/SpeechT5
+- Hugging Face `microsoft/speecht5_tts`: https://huggingface.co/microsoft/speecht5_tts
+- Hugging Face `microsoft/speecht5_hifigan`: https://huggingface.co/microsoft/speecht5_hifigan
+- Hugging Face `microsoft/wavlm-base-plus-sv`: https://huggingface.co/microsoft/wavlm-base-plus-sv

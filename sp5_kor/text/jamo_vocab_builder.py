@@ -5,7 +5,7 @@ jamo_vocab_builder.py
 이 파일의 목적
 - "자모(초/중/종성) + 기호/숫자/단위/운율 토큰"으로 구성된 vocab(어휘 목록)을 만들어
   jamo_vocab.txt로 저장합니다.
-- 이 vocab은 “텍스트 -> 토큰 ID”로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
+- 이 vocab은 텍스트를 토큰 ID로 바꾸는 토크나이저(Tokenizer)가 참조하는 기준표가 됩니다.
 
 TTS에서의 vocab
 - 텍스트 입력을 토큰 시퀀스로 받는 TTS는, 입력 문장을 먼저 토큰화하여
@@ -15,6 +15,8 @@ TTS에서의 vocab
   - 자모 기반: 초/중/종성 조합으로 모든 한글을 표현 가능 -> vocab이 작고 일반화가 쉬움.
 - 또한 “쉼표, 물음표, 단위(km, kg), pause(짧은 쉼)” 같은 것을 별도 토큰으로 두면,
   모델이 운율/억양/리듬을 더 안정적으로 학습할 수 있습니다.
+
+uv run sp5_kor/text/jamo_vocab_builder.py
 """
 
 from pathlib import Path
@@ -110,7 +112,7 @@ VOCAB = SPECIAL + CHOSEONG + JUNGSEONG + JONGSEONG + PUNCT + NUM + UNITS + PROSO
 #   (바꾸면 같은 텍스트가 다른 ID 시퀀스로 변해 모델이 망가집니다.)
 
 # vocab 저장 함수
-def save_vocab(path=Path("jamo_vocab.txt")):
+def save_vocab(path: Path | None = None):
     """
     VOCAB 리스트를 텍스트 파일로 저장합니다.
 
@@ -137,6 +139,9 @@ def save_vocab(path=Path("jamo_vocab.txt")):
     """
     # Path 객체든 문자열이든 open이 가능하지만,
     # 여기서는 명시적으로 Path를 기본값으로 사용했습니다.
+    if path is None:
+        path = Path(__file__).resolve().parent / "jamo_vocab.txt"
+
     with open(path, "w", encoding="utf-8") as f:
         for t in VOCAB:
             f.write(t + "\n")

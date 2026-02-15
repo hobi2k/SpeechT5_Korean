@@ -8,26 +8,23 @@ SpeechT5 Korean TTS Training Script
    - 숫자/단위/구두점은 훈련 시 발음 확정을 피하고 placeholder로 유지해
      음성-텍스트 정렬(alignment) 위험을 줄입니다.
      예: 3.5kg -> <num><unit_kg> (훈련)
-     추론에서는 normalize_korean을 통해 삼 점 오 킬로그램으로 바꿀 수 있음.
+     추론에서는 normalize_korean을 통해 삼 점 오 킬로그램으로 바꿀 수 있음
 
 2. 오디오를 SpeechT5가 기대하는 방식으로 전처리합니다.
-   - SpeechT5Processor(audio_target=...)가 mel target(정확히는 log-mel feature)을 생성.
+   - SpeechT5Processor(audio_target=...)가 mel target(정확히는 log-mel feature)을 생성
    - 이 mel이 decoder의 "teacher forcing target" 역할을 하며 loss가 계산됩니다.
 
 3. KSS는 단일 화자 데이터셋이므로 speaker embedding을 1개만 뽑아서 고정합니다.
    - WavLM speaker verification 모델로 embedding을 추출합니다.
-   - 모델 학습/추론 모두에서 동일 embedding 사용(= 단일 화자 음색 고정).
+   - 모델 학습/추론 모두에서 동일 embedding 사용(= 단일 화자 음색 고정)
 
 4. 학습 후 HF Hub에 필요한 아티팩트를 모두 저장/업로드합니다.
    - model, tokenizer, vocoder, speaker_embedding, korean_text_utils.py, README, demo script
 
-
 주의
 - KSS는 텍스트가 상당히 정규화된 편이지만,
-  이 스크립트는 "placeholder 기반"이므로 숫자 발음 정보를 일부 버린다.
-  만약 KSS의 스크립트가 실제 발화 발음과 완전히 일치한다면,
-  <num> 전략 대신 '그대로 자모 분해'가 더 나을 수 있습니다(데이터셋-의존).
-  다만 범용 파이프라인을 위해 placeholder 전략을 남깁니다.
+  이 스크립트는 "placeholder 기반"이므로 숫자 발음 정보를 일부 버립니다.
+
 """
 
 import os
@@ -87,16 +84,13 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-# Config
 @dataclass
 class Config:
-    # 디바이스 설정: CUDA 가능하면 GPU, 아니면 CPU
     DEVICE: torch.device = torch.device(
         "cuda" if torch.cuda.is_available() else "cpu"
     )
 
-    # 오디오 샘플링 레이트(학습/추론 모두 동일해야 안전)
-    # SpeechT5 기본 설정도 16kHz 중심으로 사용합니다.
+    # 오디오 샘플링 레이트
     TARGET_SR: int = 16000
 
     # 멜 프레임 길이(디코더 타겟 길이, frame 수)
@@ -134,9 +128,9 @@ class Config:
     JAMO_VOCAB: Path = Path("./jamo_vocab.txt")
 
     # Hugging Face Hub 설정
-    HF_USER: str = "ahnhs2k"  # 본인 계정
+    HF_USER: str = "ahnhs2k"
     HF_REPO_NAME: str = "speecht5-korean-jamo"
-    HF_PRIVATE: bool = False  # 비공개로 만들고 싶으면 True
+    HF_PRIVATE: bool = False # 공개 리포로 설정
     HF_REPO_ID: str = ""
 
     # 랜덤 시드
@@ -176,8 +170,8 @@ print("Device:", Config.DEVICE)
 # - 이 토크나이저를 PreTrainedTokenizerFast로 감싸 Transformers와 호환되게 만듭니다.
 #
 # WordLevel 사용 이유
-# - 우리는 자모/placeholder를 "이미 토큰 단위로 분해된 리스트"로 넣을 계획입니다.
-# - 즉, subword(BPE) 같은 분해가 필요 없고, '토큰=그 자체'의 고정 매핑이 가장 안정적입니다.
+# - 자모/placeholder를 이미 토큰 단위로 분해된 리스트로 넣어주기 때문에, 단순한 WordLevel 모델이 가장 적합합니다.
+# - 즉, subword(BPE) 같은 분해가 필요 없고, 토큰=그 자체의 고정 매핑이 가장 안정적입니다.
 if not Config.JAMO_VOCAB.exists():
     raise FileNotFoundError(
         f"[ERROR] jamo_vocab.txt를 찾을 수 없습니다: {Config.JAMO_VOCAB}\n"
@@ -194,7 +188,7 @@ with open(Config.JAMO_VOCAB, "r", encoding="utf-8") as f:
 tok = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
 
 # pre_tokenizer=Whitespace:
-# - 텍스트를 공백 기준으로 나누는 전처리.
+# - 텍스트를 공백 기준으로 나누는 전처리
 tok.pre_tokenizer = Whitespace()
 
 # tokenizer.json 저장:
@@ -435,8 +429,7 @@ def preprocess(batch):
 
     # 주의:
     # - processor(audio_target=...)의 결과에서 mel target은 "input_values"에 들어있다.
-    # - 흔히 NLP에서 labels라는 키를 기대하지만, 여기 구현에서는 input_values를 사용.
-    # - shape: (batch=1, frames, n_mels) 또는 구현 버전에 따라 약간 다를 수 있음
+    # - shape: (batch=1, frames, n_mels)
     mel = audio_out["input_values"][0].astype(np.float32)
 
     return {
@@ -521,7 +514,7 @@ class DataCollator:
 
         # -100 마스킹:
         # - 일반적으로 손실 계산에서 무시할 위치를 -100으로 두는 관례가 많다.
-        # - 여기서는 mel에서 0.0인 부분(패딩)을 -100으로 바꿔 loss에서 무시되게 유도.
+        # - 여기서는 mel에서 0.0인 부분(패딩)을 -100으로 바꿔 loss에서 무시되게 유도
         # 주의:
         # - "실제 mel 값이 정확히 0.0인 프레임"이 있을 수도 있다는 이론적 리스크가 있다.
         # - 더 안전하게는 padding을 만들 때 별도 mask를 유지하거나, processor가 제공하는 attention/length 정보를 활용하는 방식이 좋다.
@@ -684,61 +677,6 @@ if utils_src.exists():
 
 print("All files saved.")
 
-
-# README.md 자동 생성
-def write_readme():
-    """
-    HF Hub 모델 카드(README.md)를 자동 생성.
-    - 사용자가 리포 페이지에서 모델 특징/사용법/라이선스를 바로 확인 가능
-    """
-    readme_path = Config.MODEL_SAVE / "README.md"
-
-    # r'''...''' : raw string
-    # - 내부에 백슬래시가 들어가도 escape 경고를 피함(정규식/코드 블록 포함 시 유용)
-    readme_text = r'''
-# Korean SpeechT5 (Jamo Tokenizer, KSS)
-If you use this model in research or production,
-please cite:
-
-@misc{ahnhs2k_speecht5_korean,
-  author = {Ahn, Hosung},
-  title = {Korean SpeechT5 TTS Model},
-  year = {2025},
-  publisher = {Hugging Face},
-  url = {https://huggingface.co/ahnhs2k/...}
-}
-
-## 모델 특징
-- Base Model: microsoft/speecht5_tts
-- Dataset: Bingsu/KSS_Dataset
-- Tokenizer: Jamo-based Korean tokenizer (character-level, placeholder aware)
-- Speaker Embedding: microsoft/wavlm-base-plus-sv
-- Vocoder: microsoft/speecht5_hifigan
-- Sample Rate: 16 kHz
-- 단일 화자 한국어 TTS 모델
-
-### Text Utils (korean_text_utils.py)
-- number_to_korean(): 숫자 -> 한국어 읽기
-- normalize_korean(): 추론용 텍스트 정규화
-- prosody_split(): 구두점 기반 segment 분할
-- inject_tokens_for_training(): 훈련용 placeholder 전처리
-- decompose_jamo_with_placeholders(): placeholder 보존 자모 분해
-
-## 라이선스
-This model is released under the **CC-BY-SA-4.0** License.
-
-When using this model (including commercial usage), you must:
-- Provide attribution: "Model fine-tuned by ahnhs2k (2025)"
-- Include a link to this model page
-- Distribute derivative models under the same license
-'''
-    readme_path.write_text(readme_text, encoding="utf-8")
-    print("README.md written to", readme_path)
-
-
-write_readme()
-
-
 # demo_inference.py 생성 (prosody 기반)
 def write_demo_script():
     """
@@ -751,7 +689,7 @@ def write_demo_script():
     """
     demo_path = Config.MODEL_SAVE / "demo_inference.py"
 
-    code = f'''# -*- coding: utf-8 -*-
+    code = f'''
 import numpy as np
 import torch
 import soundfile as sf
@@ -839,7 +777,7 @@ write_demo_script()
 def create_and_push_to_hub():
     """
     HF Hub 업로드:
-    - create_repo: 리포가 없으면 생성, 있으면 존재 OK
+    - create_repo: 리포가 없으면 생성, 있으면 OK
     - upload_folder: MODEL_SAVE 폴더 안의 파일들을 전부 업로드
 
     포함되는 것:
