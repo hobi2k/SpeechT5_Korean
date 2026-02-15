@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # 최상위 저장 경로를 Path 객체로 정의
-OUT_DIR = Path("/mnt/d/tts_data/yae_ko")
+OUT_DIR = Path("path/to/data")
 # audio 폴더 경로
 AUDIO_DIR = OUT_DIR / "audio"
 # audio 폴더 생성

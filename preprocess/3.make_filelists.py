@@ -5,7 +5,7 @@ import re
 import pandas as pd
 
 # 원본 데이터 루트.
-DATA_ROOT = Path("/mnt/d/tts_data/yae_ko/")
+DATA_ROOT = Path("path/to/data")
 # 리샘플링된 wav 파일 디렉터리.
 WAV_DIR = DATA_ROOT / "sp5"
 # 원본 메타데이터 CSV.

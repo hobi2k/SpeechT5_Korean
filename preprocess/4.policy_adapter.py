@@ -4,7 +4,7 @@ import json
 import re
 
 # 원본 데이터 루트.
-DATA_ROOT = Path("/mnt/d/tts_data/yae_ko/")
+DATA_ROOT = Path("path/to/data")
 # 검증 대상 wav 디렉터리.
 WAV_DIR = DATA_ROOT / "sp5"
 # filelist 디렉터리.

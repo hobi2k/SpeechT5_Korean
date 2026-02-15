@@ -6,10 +6,10 @@ from pathlib import Path
 from tqdm import tqdm
 
 # 원본 wav 파일들이 있는 디렉토리 경로 (원래 샘플율 48kHz)
-SRC_DIR = Path("/mnt/d/tts_data/yae_ko/audio")
+SRC_DIR = Path("path/to/data/audio")
 # 리샘플링된 wav를 저장할 출력 디렉토리 경로 (목표 샘플율 16.00kHz)
 # data.py에서 리샘플링을 수행하긴 하지만, 미리 수행한다.
-DST_DIR = Path("/mnt/d/tts_data/yae_ko/sp5")
+DST_DIR = Path("path/to/data/audio_16k")
 
 # 목표 샘플링 레이트를 1600Hz로 설정
 TARGET_SR = 16000
