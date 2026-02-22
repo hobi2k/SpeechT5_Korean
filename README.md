@@ -8,6 +8,9 @@ TTS 학습과 실험용으로 제작되었습니다.
 - 추론: `scripts/inference.py`
 - 텍스트/자모 유틸: `sp5_kor/text/`
 
+예시 음성:
+- [Sample 1](output.wav)
+
 ## 프로젝트 구조
 
 핵심 디렉터리:
@@ -137,6 +140,10 @@ uv run scripts/inference.py \
 - `vocoder/`
 - `checkpoint_last.pt` (매 epoch 마지막 상태: model/optimizer/scaler/epoch)
 - `checkpoints/epoch_XXXXXX/` (10 epoch 단위 HF 모델 저장, 최대 5개 유지)
+
+## 주의
+
+`preprocess`는 데이터셋 전처리 참고용으로 남겨두었습니다.
 
 ## 인용
 
