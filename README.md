@@ -8,6 +8,9 @@ TTS 학습과 실험용으로 제작되었습니다.
 - 추론: `scripts/inference.py`
 - 텍스트/자모 유틸: `sp5_kor/text/`
 
+예시 음성:
+- [Sample 1](output.wav)
+
 ## 프로젝트 구조
 
 핵심 디렉터리:
