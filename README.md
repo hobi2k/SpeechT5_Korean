@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="s5_header.png" />
+</p>
+
 # SpeechT5_Korean
 
 본 프로젝트는 SpeechT5 한글화 프로젝트입니다.
