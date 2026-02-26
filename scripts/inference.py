@@ -5,10 +5,10 @@
 - 텍스트 유틸(korean_text_utils.py)을 로드해 normalize/prosody를 적용한다.
 
 uv run scripts/inference.py \
-  --model_dir /path/to/model \
-  --checkpoint_epoch int \
-  --text "안녕하세요. 학습된 모델 추론 테스트입니다." \
-  --out path/to/output.wav
+  --model_dir /mnt/d/tts_data/yae_ko/sp5model \
+  --checkpoint_epoch 250 \
+  --text "스피치 티 파이브 한국어 테스트입니다." \
+  --out /mnt/d/tts_data/yae_ko/sp5model/output.wav
 """
 
 from pathlib import Path
